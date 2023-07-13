@@ -1,4 +1,4 @@
-```
+
 # EC2 AWS CLI
 
 This repository contains a set of Bash scripts that interact with the AWS Command Line Interface (CLI) to manage EC2 instances and resources.
