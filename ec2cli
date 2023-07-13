@@ -1,0 +1,88 @@
+#!/bin/bash
+
+function ec2_id() {
+    aws ec2 describe-instances \
+        --query "Reservations[*].Instances[*].{PublicIP:PublicIpAddress,Type:InstanceType,Name:Tags[?Key=='Name']|[0].Value,Status:State.Name,InstanceID:InstanceId}" \
+        --filters "Name=instance-state-name,Values=*" "Name=instance-type,Values='*micro*'" --output table
+}
+
+function describeEbs() {
+    echo "Here are your EBS volumes: "
+    aws ec2 describe-volumes \
+        --query "Volumes[*].{VolumeID:VolumeId,SizeVolume:Size,AZ:AvailabilityZone,Type:VolumeType,Status:State,InstancesId:Attachments[0].InstanceId,DeviceName:Attachments[0].Device}" \
+        --output table
+}
+
+function displaySGs() {
+    echo "Here are your Security Groups: "
+    aws ec2 describe-security-groups \
+        --query 'SecurityGroups[*].{GroupId:GroupId,GroupName:GroupName,VpcId:VpcId,Description:Description}' \
+        --output table
+}
+
+function launch_ec2() {
+    vpc_id=$(aws ec2 describe-vpcs --query "Vpcs[0].VpcId")
+    subnet_id=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$vpc_id" --query 'Subnets[0].SubnetId' --output text)
+    security=$(aws ec2 describe-security-groups --filters Name=vpc-id,Values=$vpc_id --query 'SecurityGroups[0].GroupId' --output text)
+    
+    aws ec2 run-instances \
+        --image-id ami-0ac64ad8517166fb1 \
+        --count 1 \
+        --instance-type t2.micro \
+        --key-name vockey \
+        --security-group-ids $security \
+        --subnet-id $subnet_id
+}
+
+function stopEC2() {
+    ec2_id
+    read -p "Enter an EC2 instance ID: " id
+    aws ec2 stop-instances --instance-ids $id
+}
+
+function ebs() {
+    ec2_id
+    read -p "Enter an EC2 instance ID: " id
+    volume_id=$(aws ec2 create-volume --availability-zone us-west-2b --size 20 --volume-type gp2 --query 'VolumeId' --output text)
+    aws ec2 wait volume-available --volume-ids $volume_id
+    aws ec2 attach-volume --volume-id $volume_id --instance-id $id --device /dev/sdf
+}
+
+function startEC2() {
+    ec2_id
+    read -p "Enter an EC2 instance ID: " id
+    aws ec2 start-instances --instance-ids $id
+}
+
+function terminateEC2() {
+    ec2_id
+    read -p "Enter an EC2 instance ID: " id
+    aws ec2 terminate-instances --instance-ids $id
+}
+
+function main() {
+    while true; do
+        echo "0. Describe EBS"
+        echo "1. Launch EC2"
+        echo "2. Stop EC2"
+        echo "3. EBS"
+        echo "4. Start EC2"
+        echo "5. Terminate EC2"
+        echo "6. Quit"
+
+        read -p "Choose from the list: " choice
+
+        case $choice in
+        0) describeEbs ;;
+        1) launch_ec2 ;;
+        2) stopEC2 ;;
+        3) ebs ;;
+        4) startEC2 ;;
+        5) terminateEC2 ;;
+        6) break ;;
+        *) echo "Invalid choice. Please choose from 1 to 7." ;;
+        esac
+    done
+}
+
+main
